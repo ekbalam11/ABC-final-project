@@ -62,3 +62,35 @@
 | `month` | Mes (1-12) |
 | `year` | Año |
 | `dayofyear` | Día del año (1-365) |
+
+
+
+## Rangos teóricos de los índices
+
+| Índice | Rango teórico | Acotado | Valor mínimo | Valor máximo |
+|---|---|---|---|---|
+| `ndvi` | -1 a 1 | ✅ | Agua o superficies artificiales | Vegetación densa y sana |
+| `ndbi` | -1 a 1 | ✅ | Vegetación o agua | Alta densidad de superficie construida |
+| `gndvi` | -1 a 1 | ✅ | Agua o suelo desnudo | Alta concentración de clorofila |
+| `ndre` | -1 a 1 | ✅ | Vegetación estresada o ausente | Vegetación sana con alto contenido de clorofila |
+| `ndwi` | -1 a 1 | ✅ | Suelo seco o superficie construida | Lámina de agua superficial |
+| `mndwi` | -1 a 1 | ✅ | Suelo seco o superficie construida | Lámina de agua superficial |
+| `ndmi` | -1 a 1 | ✅ | Vegetación seca o suelo sin humedad | Vegetación con alta humedad |
+| `ndsi` | -1 a 1 | ✅ | Suelo desnudo o superficie construida | Nieve o hielo |
+| `nbr` | -1 a 1 | ✅ | Área quemada severa | Vegetación densa sin quemar |
+| `ui` | -1 a 1 | ✅ | Vegetación o agua | Alta intensidad de urbanización |
+| `bsi` | -1 a 1 | ✅ | Vegetación densa | Suelo desnudo o superficie degradada |
+| `gli` | -1 a 1 | ✅ | Superficie no vegetada | Vegetación verde activa |
+| `msavi` | -1 a 1 | ✅ | Suelo desnudo o superficie artificial | Vegetación densa con mínima influencia del suelo |
+| `evi` | -1 a ~2 | ⚠️ | Agua o superficies artificiales | Vegetación muy densa en zonas tropicales |
+| `evi2` | -1 a ~2 | ⚠️ | Agua o superficies artificiales | Vegetación muy densa |
+| `savi` | -1.5 a 1.5 | ⚠️ | Superficies artificiales o agua | Vegetación densa sobre suelo de alta reflectancia |
+| `ibi` | -1 a 1 | ⚠️ | Agua o vegetación densa | Alta densidad urbana integrada |
+| `cire` | 0 a ∞ | ❌ | Vegetación con bajo contenido de clorofila | Alta concentración de clorofila |
+| `ebbi` | sin límite | ❌ | Vegetación densa o agua | Superficie construida o suelo desnudo expuesto |
+| `psri` | sin límite | ❌ | Vegetación joven y verde | Vegetación senescente o en proceso de maduración |
+
+> ✅ Acotado por construcción matemática  
+> ⚠️ Teóricamente acotado pero puede producir outliers en píxeles con valores de banda cercanos a cero  
+> ❌ Sin límite teórico — requiere filtrado de outliers en el EDA
+
