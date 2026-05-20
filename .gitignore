@@ -6,8 +6,11 @@ __pycache__/
 # C extensions
 *.so
 
+<<<<<<< HEAD
 #geodata
 
+=======
+>>>>>>> 107d013e8a39c513bd692f197f22da990eabfc0e
 # Distribution / packaging
 .Python
 build/
@@ -218,4 +221,3 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-*.joblib

@@ -94,3 +94,4 @@
 > ⚠️ Teóricamente acotado pero puede producir outliers en píxeles con valores de banda cercanos a cero  
 > ❌ Sin límite teórico — requiere filtrado de outliers en el EDA
 
+# ABC-final-project
