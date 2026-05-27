@@ -4,75 +4,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import folium
+import joblib
 from pathlib import Path
 from folium.plugins import HeatMap, MarkerCluster
 from streamlit_folium import st_folium
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score
 import warnings
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DATOS DEL MODELO
-# ─────────────────────────────────────────────────────────────────────────────
-
-MODELO = {
-    "nombre":     "XGBoost",
-    "n_arboles":  600,
-    "color":      "#3498DB",
-
-    # Métricas globales
-    "accuracy":   0.68,
-    "f1_macro":   0.68,
-    "auc_roc":    0.7459,
-
-    # Métricas por clase
-    "clases": {
-        "no_riesgo": {"precision": 0.68, "recall": 0.63, "f1": 0.65},
-        "riesgo":    {"precision": 0.68, "recall": 0.73, "f1": 0.71},
-    },
-
-    # Matriz de confusión [TN FP / FN TP]
-    "confusion_matrix": [
-        [4135, 2478],   # [TN, FP]
-        [1946, 5378],   # [FN, TP]
-    ],
-
-    # Hiperparámetros óptimos
-    "hiperparametros": {
-        "n_estimators":    600,
-        "learning_rate":   0.02,
-        "max_depth":       7,
-        "subsample":       0.9,
-        "colsample_bytree":0.8,
-        "reg_alpha":       1,
-        "reg_lambda":      1,
-        "gamma":           0.5,
-    },
-
-    # Feature importances — actualizar con los valores reales del modelo
-    "feature_importances": {
-        "elevation":        0.166750,
-        "season_summer":    0.153434,
-        "season_winter":    0.121504,
-        "ndvi":             0.089679,
-        "season_spring":    0.068757,
-        "nbr":              0.061618,
-        "ndwi":             0.058517,
-        "mndwi":            0.049134,
-        "swir2":            0.048130,
-        "nir":              0.047852,
-        "swir1":            0.046644,
-        "ndmi":             0.044848,
-        "ndbi":             0.043131
-    },
-
-    # Dataset
-    "n_total":  69683,
-    "n_train":  55746,
-    "n_test":   13937,
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ESTILO GLOBAL MATPLOTLIB
+# CONSTANTES
 # ─────────────────────────────────────────────────────────────────────────────
 
 BG_MAIN  = "#0E1117"
@@ -82,8 +24,20 @@ BORDER   = "#2D3045"
 TEXT_DIM = "#8890A4"
 TEXT_MED = "#C8CDD8"
 TEXT_BRT = "#E0E4EF"
-ACCENT   = MODELO["color"]
+ACCENT   = "#3498DB"
 RED      = "#E74C3C"
+
+COLORES_MAPA = {
+    "TP": "#2ECC71",
+    "TN": "#3498DB",
+    "FP": "#F39C12",
+    "FN": "#E74C3C",
+}
+
+COLORES_PRED = {
+    "riesgo":    "#E74C3C",
+    "no_riesgo": "#3498DB",
+}
 
 plt.rcParams.update({
     "figure.facecolor": BG_MAIN,
@@ -101,24 +55,13 @@ plt.rcParams.update({
 })
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COLORES DEL MAPA
+# CARGA DE DATOS Y MODELO
 # ─────────────────────────────────────────────────────────────────────────────
 
-COLORES_MAPA = {
-    "TP": "#2ECC71",
-    "TN": "#3498DB",
-    "FP": "#F39C12",
-    "FN": "#E74C3C",
-}
-
-COLORES_PRED = {
-    "riesgo":    "#E74C3C",
-    "no_riesgo": "#3498DB",
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CARGA DEL CSV DEL MAPA
-# ─────────────────────────────────────────────────────────────────────────────
+@st.cache_resource
+def cargar_modelo():
+    path = Path(__file__).parent.parent / "models" / "xgboost_uhi_no_geo_optimized.sav"
+    return joblib.load(path)
 
 @st.cache_data
 def cargar_mapa_data():
@@ -127,7 +70,70 @@ def cargar_mapa_data():
         return pd.read_csv(path), None
     except FileNotFoundError:
         return None, str(path)
-    
+
+@st.cache_data
+def cargar_metricas():
+    modelo = cargar_modelo()
+    df     = pd.read_csv(
+        Path(__file__).parent.parent / "data" / "processed" / "dataset_modeling.csv"
+    )
+
+    features = [
+        'elevation', 'mndwi', 'nbr', 'ndbi', 'ndmi',
+        'ndvi', 'ndwi', 'nir', 'swir1', 'swir2', 'season'
+    ]
+    X = pd.get_dummies(df[features], columns=['season'], drop_first=True)
+    y = df['uhi_risk']
+
+    _, X_test, _, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    y_pred  = modelo.predict(X_test)
+    y_proba = modelo.predict_proba(X_test)[:, 1]
+
+    cm     = confusion_matrix(y_test, y_pred)
+    report = classification_report(y_test, y_pred, output_dict=True)
+    auc    = roc_auc_score(y_test, y_proba)
+    fi     = pd.Series(
+        modelo.feature_importances_,
+        index=modelo.feature_names_in_
+    ).sort_values(ascending=False)
+
+    return {
+        "accuracy":  report["accuracy"],
+        "f1_macro":  report["macro avg"]["f1-score"],
+        "auc_roc":   auc,
+        "clases": {
+            "no_riesgo": {
+                "precision": report["0"]["precision"],
+                "recall":    report["0"]["recall"],
+                "f1":        report["0"]["f1-score"],
+            },
+            "riesgo": {
+                "precision": report["1"]["precision"],
+                "recall":    report["1"]["recall"],
+                "f1":        report["1"]["f1-score"],
+            },
+        },
+        "confusion_matrix": cm.tolist(),
+        "feature_importances": fi.to_dict(),
+        "n_total":  len(df),
+        "n_train":  len(df) - len(X_test),
+        "n_test":   len(X_test),
+        "n_arboles": modelo.n_estimators,
+        "hiperparametros": {
+            "n_estimators":     modelo.n_estimators,
+            "learning_rate":    modelo.learning_rate,
+            "max_depth":        modelo.max_depth,
+            "subsample":        modelo.subsample,
+            "colsample_bytree": modelo.colsample_bytree,
+            "reg_alpha":        modelo.reg_alpha,
+            "reg_lambda":       modelo.reg_lambda,
+            "gamma":            modelo.gamma,
+        }
+    }
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PÁGINA
 # ─────────────────────────────────────────────────────────────────────────────
@@ -190,11 +196,17 @@ html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
     font-size: 11px; font-weight: 600; font-family: 'Space Mono', monospace;
     margin-right: 6px;
 }
-.tag-blue   { background: #12243D; color: #3498DB; border: 1px solid #3498DB33; }
+.tag-blue { background: #12243D; color: #3498DB; border: 1px solid #3498DB33; }
 
 div[data-testid="stSidebar"] { background-color: #13151F; border-right: 1px solid #2D3045; }
 </style>
 """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CARGAR MÉTRICAS
+# ─────────────────────────────────────────────────────────────────────────────
+
+metricas = cargar_metricas()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SIDEBAR
@@ -205,7 +217,7 @@ with st.sidebar:
     st.markdown(f"""
     <div style='font-size:12px;color:#8890A4;line-height:1.8;'>
     <b style='color:#C8CDD8;'>Modelo:</b> XGBoost<br>
-    <b style='color:#C8CDD8;'>Estimadores:</b> 600<br>
+    <b style='color:#C8CDD8;'>Estimadores:</b> {metricas['n_arboles']}<br>
     <b style='color:#C8CDD8;'>Features:</b> 9 índices + elevation + season<br>
     <b style='color:#C8CDD8;'>Fuente:</b> Sentinel-2 / MODIS<br>
     <b style='color:#C8CDD8;'>Target:</b> Riesgo UHI (binario)<br>
@@ -215,24 +227,26 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"""
     <div style='font-size:12px;color:#8890A4;line-height:1.9;'>
-    <b style='color:#C8CDD8;'>Total obs.:</b> {MODELO['n_total']:,}<br>
-    <b style='color:#C8CDD8;'>Train:</b> {MODELO['n_train']:,}<br>
-    <b style='color:#C8CDD8;'>Test:</b> {MODELO['n_test']:,}<br>
+    <b style='color:#C8CDD8;'>Total obs.:</b> {metricas['n_total']:,}<br>
+    <b style='color:#C8CDD8;'>Train:</b> {metricas['n_train']:,}<br>
+    <b style='color:#C8CDD8;'>Test:</b> {metricas['n_test']:,}<br>
     <b style='color:#C8CDD8;'>Split:</b> 80 / 20<br>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
     vista = st.radio(
-        "Sección",
-        [
-            "📊 Resumen ejecutivo",
-            "🔬 Análisis detallado",
-            "🌿 Importancia de variables",
-            "🗺️ Mapa de predicciones",
-        ],
-        label_visibility="collapsed",
-    )
+    "Sección",
+    [
+        "📊 Resumen ejecutivo",
+        "🔬 Análisis detallado",
+        "🌿 Importancia de variables",
+        "🗺️ Mapa de predicciones",
+        "🔮 Predicción",
+    ],
+    label_visibility="collapsed",
+)
+
 
     st.markdown("---")
     st.markdown("""
@@ -261,9 +275,9 @@ with col_h1:
     </div>
     """, unsafe_allow_html=True)
 with col_h2:
-    st.markdown("""
+    st.markdown(f"""
     <div style='padding-top:24px;text-align:right;'>
-        <span class='tag tag-blue'>✅ XGB — 600 estimadores</span>
+        <span class='tag tag-blue'>✅ XGB — {metricas['n_arboles']} estimadores</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -279,10 +293,10 @@ if vista == "📊 Resumen ejecutivo":
     k1, k2, k3, k4 = st.columns(4)
 
     kpis = [
-        (k1, "ACCURACY",  f"{MODELO['accuracy']:.0%}",  "vs. 50% baseline aleatorio"),
-        (k2, "F1 MACRO",  f"{MODELO['f1_macro']:.2f}",  "media entre clases"),
-        (k3, "AUC-ROC",   f"{MODELO['auc_roc']:.4f}",   "área bajo la curva ROC"),
-        (k4, "N TEST",    f"{MODELO['n_test']:,}",       "observaciones de evaluación"),
+        (k1, "ACCURACY", f"{metricas['accuracy']:.0%}",  "vs. 50% baseline aleatorio"),
+        (k2, "F1 MACRO",  f"{metricas['f1_macro']:.2f}", "media entre clases"),
+        (k3, "AUC-ROC",   f"{metricas['auc_roc']:.4f}",  "área bajo la curva ROC"),
+        (k4, "N TEST",    f"{metricas['n_test']:,}",      "observaciones de evaluación"),
     ]
 
     for col, label, val, sub in kpis:
@@ -302,8 +316,8 @@ if vista == "📊 Resumen ejecutivo":
         '🌡️ &nbsp;El modelo predice el riesgo UHI exclusivamente a partir de índices espectrales '
         'derivados de imágenes satelitales y la elevación del terreno, '
         '<b>sin ninguna variable de temperatura como input</b>. '
-        'Con un AUC-ROC de 0.7459, el modelo tiene capacidad real de separar zonas de riesgo '
-        'desde la firma espectral del suelo urbano.'
+        f'Con un AUC-ROC de {metricas["auc_roc"]:.4f}, el modelo tiene capacidad real de separar '
+        'zonas de riesgo desde la firma espectral del suelo urbano.'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -313,39 +327,46 @@ if vista == "📊 Resumen ejecutivo":
     c_nr, c_r = st.columns(2)
 
     for col_ui, clase, datos_clase, color_clase, icono, comentario in [
-        (c_nr, "no_riesgo", MODELO["clases"]["no_riesgo"], "#3498DB", "🟦",
-         "Precision 0.68 · el modelo identifica correctamente las zonas sin riesgo en el 68% de los casos."),
-        (c_r,  "riesgo",    MODELO["clases"]["riesgo"],    ACCENT,    "🟥",
-         "Recall 0.73 · el modelo detecta 3 de cada 4 zonas con riesgo UHI real. Indicador clave en planificación urbana."),
+        (c_nr, "no_riesgo", metricas["clases"]["no_riesgo"], "#3498DB", "🟦",
+         f"Precision {metricas['clases']['no_riesgo']['precision']:.2f} · el modelo identifica correctamente las zonas sin riesgo."),
+        (c_r,  "riesgo",    metricas["clases"]["riesgo"],    ACCENT,    "🟥",
+         f"Recall {metricas['clases']['riesgo']['recall']:.2f} · indicador clave en planificación urbana."),
     ]:
         with col_ui:
-            p, r, f = datos_clase["precision"], datos_clase["recall"], datos_clase["f1"]
+            p = datos_clase["precision"]
+            r = datos_clase["recall"]
+            f = datos_clase["f1"]
             st.markdown(
                 f'<div class="class-card">'
                 f'<div class="class-title" style="color:{color_clase};">{icono} &nbsp;<code>{clase}</code></div>',
                 unsafe_allow_html=True,
             )
             fig_b, ax_b = plt.subplots(figsize=(4, 1.8))
-            metricas = ["Precision", "Recall", "F1-score"]
-            valores  = [p, r, f]
-            bars = ax_b.barh(metricas, valores, color=color_clase, alpha=0.8, height=0.55, zorder=3)
-            for bar, val in zip(bars, valores):
+            bars = ax_b.barh(
+                ["Precision", "Recall", "F1-score"], [p, r, f],
+                color=color_clase, alpha=0.8, height=0.55, zorder=3
+            )
+            for bar, val in zip(bars, [p, r, f]):
                 ax_b.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height()/2,
-                          f"{val:.2f}", va="center", fontsize=10, color=color_clase, fontweight="bold")
+                          f"{val:.2f}", va="center", fontsize=10,
+                          color=color_clase, fontweight="bold")
             ax_b.set_xlim(0, 1.15)
             ax_b.axvline(0.5, color=BORDER, linewidth=0.8, linestyle="--", zorder=0)
             ax_b.grid(axis="x", alpha=0.2, zorder=0)
             fig_b.tight_layout(pad=0.4)
             st.pyplot(fig_b, use_container_width=True)
             plt.close(fig_b)
-            st.markdown(f'<div class="metric-sub" style="margin-top:6px;font-size:12px;color:{TEXT_DIM};">{comentario}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="metric-sub" style="margin-top:6px;font-size:12px;color:{TEXT_DIM};">'
+                f'{comentario}</div>',
+                unsafe_allow_html=True
+            )
             st.markdown('</div>', unsafe_allow_html=True)
 
     # Hiperparámetros
     st.markdown('<div class="section-title">Hiperparámetros óptimos</div>', unsafe_allow_html=True)
-    hp = MODELO["hiperparametros"]
     cols_hp = st.columns(4)
-    for i, (param, val) in enumerate(hp.items()):
+    for i, (param, val) in enumerate(metricas["hiperparametros"].items()):
         with cols_hp[i % 4]:
             st.markdown(
                 f'<div class="metric-card">'
@@ -364,7 +385,7 @@ elif vista == "🔬 Análisis detallado":
 
     st.markdown('<div class="section-title">Matriz de Confusión</div>', unsafe_allow_html=True)
 
-    cm = np.array(MODELO["confusion_matrix"])
+    cm = np.array(metricas["confusion_matrix"])
     tn, fp, fn, tp = cm[0,0], cm[0,1], cm[1,0], cm[1,1]
     total = tn + fp + fn + tp
 
@@ -388,7 +409,8 @@ elif vista == "🔬 Análisis detallado":
             for j in range(2):
                 ax_cm.text(j+0.5, i+0.78, etiquetas[i][j],
                            ha='center', fontsize=9, color=TEXT_DIM)
-        ax_cm.set_title(f"Predicciones en test (N = {total:,})", fontsize=11, pad=14, color=TEXT_MED)
+        ax_cm.set_title(f"Predicciones en test (N = {total:,})",
+                        fontsize=11, pad=14, color=TEXT_MED)
         fig_cm.tight_layout()
         st.pyplot(fig_cm, use_container_width=True)
         plt.close(fig_cm)
@@ -421,10 +443,25 @@ elif vista == "🔬 Análisis detallado":
 
     df_rep = pd.DataFrame({
         "Clase":     ["no_riesgo", "riesgo", "—", "macro avg"],
-        "Precision": [0.68, 0.68, "—", 0.68],
-        "Recall":    [0.63, 0.73, "—", 0.68],
-        "F1-score":  [0.65, 0.71, "—", 0.68],
-        "Support":   [f"{tn+fp:,}", f"{fn+tp:,}", "—", f"{total:,}"],
+        "Precision": [
+            round(metricas["clases"]["no_riesgo"]["precision"], 2),
+            round(metricas["clases"]["riesgo"]["precision"], 2),
+            "—",
+            round(metricas["f1_macro"], 2)
+        ],
+        "Recall": [
+            round(metricas["clases"]["no_riesgo"]["recall"], 2),
+            round(metricas["clases"]["riesgo"]["recall"], 2),
+            "—",
+            round(metricas["f1_macro"], 2)
+        ],
+        "F1-score": [
+            round(metricas["clases"]["no_riesgo"]["f1"], 2),
+            round(metricas["clases"]["riesgo"]["f1"], 2),
+            "—",
+            round(metricas["f1_macro"], 2)
+        ],
+        "Support": [f"{tn+fp:,}", f"{fn+tp:,}", "—", f"{total:,}"],
     })
 
     def style_report(row):
@@ -448,7 +485,8 @@ elif vista == "🔬 Análisis detallado":
         '(zonas predichas como riesgo que no lo son) implican intervenciones preventivas '
         'innecesarias — un coste asumible. Los falsos negativos (zonas de riesgo '
         'no detectadas) representan intervenciones omitidas, potencialmente más dañinas. '
-        'El modelo prioriza correctamente el recall en la clase <code>riesgo</code> (0.73).'
+        f'El modelo prioriza correctamente el recall en la clase <code>riesgo</code> '
+        f'({metricas["clases"]["riesgo"]["recall"]:.2f}).'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -462,10 +500,10 @@ elif vista == "🌿 Importancia de variables":
 
     st.markdown('<div class="section-title">Importancia por índice espectral</div>', unsafe_allow_html=True)
 
-    fi = dict(sorted(MODELO["feature_importances"].items(), key=lambda x: x[1], reverse=True))
+    fi = metricas["feature_importances"]
     nombres = list(fi.keys())
     valores  = list(fi.values())
-    colores_fi = [ACCENT if v >= 0.20 else ("#2ECC71" if v >= 0.10 else "#8890A4") for v in valores]
+    colores_fi = [ACCENT if v >= 0.15 else ("#2ECC71" if v >= 0.08 else "#8890A4") for v in valores]
 
     fig_fi, ax_fi = plt.subplots(figsize=(8, 5))
     bars_fi = ax_fi.barh(
@@ -475,7 +513,7 @@ elif vista == "🌿 Importancia de variables":
     for bar, val, c in zip(bars_fi, valores[::-1], colores_fi[::-1]):
         ax_fi.text(
             bar.get_width() + 0.003, bar.get_y() + bar.get_height()/2,
-            f"{val:.0%}", va="center", fontsize=10, color=c, fontweight="bold"
+            f"{val:.1%}", va="center", fontsize=10, color=c, fontweight="bold"
         )
     ax_fi.set_xlabel("Importancia relativa (Gini)")
     ax_fi.set_xlim(0, max(valores) * 1.25)
@@ -488,43 +526,51 @@ elif vista == "🌿 Importancia de variables":
     st.markdown('<div class="section-title">Interpretación física</div>', unsafe_allow_html=True)
 
     interpretaciones = {
-        "ndvi":     ("NDVI",      ACCENT,    "Normalized Difference Vegetation Index",
-                     "Variable más relevante (~29%). Actúa como proxy de refrigeración urbana: "
-                     "la vegetación densa mitiga el calor mediante evapotranspiración y sombreado. "
-                     "Zonas con bajo NDVI presentan mayor riesgo UHI."),
-        "nbr":      ("NBR",       "#2ECC71", "Normalized Burn Ratio",
-                     "Alta importancia (~12%). Sensible a la cobertura vegetal y la humedad del suelo. "
-                     "Complementa al NDVI distinguiendo vegetación sana de suelo degradado."),
-        "ndwi":     ("NDWI",      "#2ECC71", "Normalized Difference Water Index",
-                     "~12% de importancia. Detecta presencia de agua superficial. "
-                     "Las masas de agua tienen efecto regulador térmico sobre las zonas circundantes."),
-        "swir2":    ("SWIR2",     "#8890A4", "Short-Wave Infrared Band 2",
-                     "~11%. Sensible a la humedad del suelo y materiales de construcción. "
-                     "Superficies impermeables y secas retienen más calor que suelos húmedos."),
-        "ndmi":     ("NDMI",      "#8890A4", "Normalized Difference Moisture Index",
-                     "~8%. Mide el contenido de humedad en la vegetación y el suelo. "
-                     "Zonas con baja humedad presentan mayor vulnerabilidad al UHI."),
-        "swir1":    ("SWIR1",     "#8890A4", "Short-Wave Infrared Band 1",
-                     "~8%. Relacionado con la impermeabilización del suelo urbano. "
-                     "Complementa a SWIR2 en la caracterización de superficies construidas."),
-        "ndbi":     ("NDBI",      "#8890A4", "Normalized Difference Built-up Index",
-                     "~8%. Índice de urbanización: distingue superficies construidas de vegetación. "
-                     "Alta correlación con islas de calor en entornos densamente edificados."),
-        "mndwi":    ("MNDWI",     "#8890A4", "Modified Normalized Difference Water Index",
-                     "~7%. Versión mejorada del NDWI usando SWIR en lugar de NIR. "
-                     "Más preciso para detectar agua urbana como fuentes reguladoras de temperatura."),
-        "nir":      ("NIR",       "#8890A4", "Near-Infrared Reflectance",
-                     "~6%. Complementa la distinción entre vegetación activa y suelos desnudos "
-                     "o superficies construidas. Base de cálculo de NDVI y otros índices."),
-        "elevation":("Elevation", "#8890A4", "Elevación del terreno (metros)",
-                     "Contexto topográfico del punto. La altitud influye en la temperatura "
-                     "base del entorno y modula el efecto UHI en zonas con relieve significativo."),
+        "elevation":     ("Elevation",    ACCENT,    "Elevación del terreno (metros)",
+                          "Variable más relevante. La altitud influye en la temperatura base "
+                          "del entorno y modula el efecto UHI en zonas con relieve significativo."),
+        "season_summer": ("Season Summer","#2ECC71",  "Estación: verano",
+                          "El verano es el período de mayor riesgo UHI — las temperaturas "
+                          "nocturnas son más altas y la retención de calor urbano más pronunciada."),
+        "season_winter": ("Season Winter","#2ECC71",  "Estación: invierno",
+                          "El invierno representa el contraste térmico más claro respecto al verano, "
+                          "ayudando al modelo a discriminar entre estaciones extremas."),
+        "ndvi":          ("NDVI",         "#8890A4", "Normalized Difference Vegetation Index",
+                          "La vegetación densa mitiga el calor mediante evapotranspiración y sombreado. "
+                          "Zonas con bajo NDVI presentan mayor riesgo UHI."),
+        "season_spring": ("Season Spring","#8890A4", "Estación: primavera",
+                          "Estación de transición con señal moderada. Ayuda al modelo a "
+                          "contextualizar las observaciones entre invierno y verano."),
+        "nbr":           ("NBR",          "#8890A4", "Normalized Burn Ratio",
+                          "Sensible a la cobertura vegetal y la humedad del suelo. "
+                          "Complementa al NDVI distinguiendo vegetación sana de suelo degradado."),
+        "ndwi":          ("NDWI",         "#8890A4", "Normalized Difference Water Index",
+                          "Detecta presencia de agua superficial. Las masas de agua tienen "
+                          "efecto regulador térmico sobre las zonas circundantes."),
+        "mndwi":         ("MNDWI",        "#8890A4", "Modified Normalized Difference Water Index",
+                          "Versión mejorada del NDWI usando SWIR en lugar de NIR. "
+                          "Más preciso para detectar agua urbana como fuente reguladora de temperatura."),
+        "swir2":         ("SWIR2",        "#8890A4", "Short-Wave Infrared Band 2",
+                          "Sensible a la humedad del suelo y materiales de construcción. "
+                          "Superficies impermeables y secas retienen más calor que suelos húmedos."),
+        "nir":           ("NIR",          "#8890A4", "Near-Infrared Reflectance",
+                          "Complementa la distinción entre vegetación activa y suelos desnudos "
+                          "o superficies construidas. Base de cálculo de NDVI y otros índices."),
+        "swir1":         ("SWIR1",        "#8890A4", "Short-Wave Infrared Band 1",
+                          "Relacionado con la impermeabilización del suelo urbano. "
+                          "Complementa a SWIR2 en la caracterización de superficies construidas."),
+        "ndmi":          ("NDMI",         "#8890A4", "Normalized Difference Moisture Index",
+                          "Mide el contenido de humedad en la vegetación y el suelo. "
+                          "Zonas con baja humedad presentan mayor vulnerabilidad al UHI."),
+        "ndbi":          ("NDBI",         "#8890A4", "Normalized Difference Built-up Index",
+                          "Índice de urbanización: distingue superficies construidas de vegetación. "
+                          "Alta correlación con islas de calor en entornos densamente edificados."),
     }
 
     cols_fi = st.columns(3)
     for i, (key, (sigla, col_fi, nombre_completo, texto)) in enumerate(interpretaciones.items()):
         with cols_fi[i % 3]:
-            imp_val = MODELO["feature_importances"].get(key, 0)
+            imp_val = fi.get(key, 0)
             st.markdown(
                 f'<div style="background:#1A1D27;border:1px solid #2D3045;border-radius:10px;'
                 f'padding:14px 16px;margin-bottom:12px;">'
@@ -533,18 +579,19 @@ elif vista == "🌿 Importancia de variables":
                 f'<div style="font-size:10px;color:#6B7280;margin-bottom:10px;">{nombre_completo}</div>'
                 f'<div style="font-size:12px;color:#C8CDD8;line-height:1.55;">{texto}</div>'
                 f'<div style="margin-top:10px;font-family:Space Mono,monospace;font-size:14px;'
-                f'font-weight:700;color:{col_fi};">{imp_val:.0%}</div>'
+                f'font-weight:700;color:{col_fi};">{imp_val:.1%}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
+    top_feature = max(fi, key=fi.get)
+    top_val     = fi[top_feature]
     st.markdown(
-        '<div class="insight-box info">'
-        '🌿 &nbsp;<b>NDVI domina con ~29%</b> de la importancia total, confirmando que la cobertura '
-        'vegetal es el principal predictor del riesgo UHI desde la firma espectral. '
-        'El resto de índices contribuyen de forma más equilibrada (6-12%), indicando que el modelo '
-        'integra múltiples dimensiones del entorno físico urbano.'
-        '</div>',
+        f'<div class="insight-box info">'
+        f'🌿 &nbsp;<b>{top_feature.upper()} lidera con {top_val:.1%}</b> de la importancia total. '
+        f'El modelo integra múltiples dimensiones del entorno físico urbano — '
+        f'topografía, estacionalidad y firma espectral — para detectar el riesgo UHI.'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -645,13 +692,13 @@ elif vista == "🗺️ Mapa de predicciones":
     if "calor" in capa:
         heat_data = df_vis[["latitude", "longitude", "pred_proba"]].values.tolist()
         HeatMap(
-        heat_data,
-        min_opacity=0.4,
-        max_zoom=18,
-        radius=40,        # era 25
-        blur=35,          # era 20
-        gradient={0.0: "#3498DB", 0.5: "#E74C3C"},
-    ).add_to(m)
+            heat_data,
+            min_opacity=0.4,
+            max_zoom=18,
+            radius=40,
+            blur=35,
+            gradient={0.0: "#3498DB", 0.5: "#E74C3C"},
+        ).add_to(m)
         leyenda_html = """
         <div style="position:fixed;bottom:30px;left:30px;z-index:1000;
                     background:#1A1D27;border:1px solid #2D3045;border-radius:8px;
@@ -732,6 +779,89 @@ elif vista == "🗺️ Mapa de predicciones":
         f'</div>',
         unsafe_allow_html=True,
     )
+    
+# ══════════════════════════════════════════════════════════════════════════════
+# VISTA 5 — PREDICCIÓN MANUAL
+# ══════════════════════════════════════════════════════════════════════════════
+
+elif vista == "🔮 Predicción":
+
+    st.markdown('<div class="section-title">Introduce los valores del punto</div>', unsafe_allow_html=True)
+
+    modelo = cargar_modelo()
+
+    col_inputs1, col_inputs2 = st.columns(2)
+
+    with col_inputs1:
+        elevation = st.number_input("Elevation (m)",        min_value=0,    max_value=1000, value=50)
+        ndvi      = st.slider("NDVI",   min_value=-1.0, max_value=1.0, value=0.3,  step=0.01)
+        ndbi      = st.slider("NDBI",   min_value=-1.0, max_value=1.0, value=0.0,  step=0.01)
+        ndmi      = st.slider("NDMI",   min_value=-1.0, max_value=1.0, value=0.0,  step=0.01)
+        ndwi      = st.slider("NDWI",   min_value=-1.0, max_value=1.0, value=-0.3, step=0.01)
+        nbr       = st.slider("NBR",    min_value=-1.0, max_value=1.0, value=0.2,  step=0.01)
+
+    with col_inputs2:
+        season    = st.selectbox("Season", ["autumn", "spring", "summer", "winter"])
+        mndwi     = st.slider("MNDWI",  min_value=-1.0, max_value=1.0, value=-0.3, step=0.01)
+        nir       = st.slider("NIR",    min_value=0.0,  max_value=1.0, value=0.25, step=0.01)
+        swir1     = st.slider("SWIR1",  min_value=0.0,  max_value=1.0, value=0.15, step=0.01)
+        swir2     = st.slider("SWIR2",  min_value=0.0,  max_value=1.0, value=0.10, step=0.01)
+
+    st.markdown("")
+
+    if st.button("🔍 Predecir", use_container_width=True):
+
+        # Construir dataframe con los mismos features que el modelo
+        input_data = pd.DataFrame([{
+            "elevation": elevation,
+            "mndwi":     mndwi,
+            "nbr":       nbr,
+            "ndbi":      ndbi,
+            "ndmi":      ndmi,
+            "ndvi":      ndvi,
+            "ndwi":      ndwi,
+            "nir":       nir,
+            "swir1":     swir1,
+            "swir2":     swir2,
+            "season":    season,
+        }])
+
+        # One-hot encoding igual que en el entrenamiento
+        input_enc = pd.get_dummies(input_data, columns=["season"], drop_first=True)
+
+        # Asegurar que tiene todas las columnas que espera el modelo
+        for col in modelo.feature_names_in_:
+            if col not in input_enc.columns:
+                input_enc[col] = 0
+
+        input_enc = input_enc[modelo.feature_names_in_]
+
+        # Predicción
+        pred = modelo.predict(input_enc)[0]
+
+        # Mostrar resultado
+        if pred == 1:
+            st.markdown(
+                '<div style="background:#2D1A1A;border:2px solid #E74C3C;border-radius:12px;'
+                'padding:24px;text-align:center;margin-top:16px;">'
+                '<div style="font-family:Space Mono,monospace;font-size:32px;font-weight:700;'
+                'color:#E74C3C;">⚠️ RIESGO UHI</div>'
+                '<div style="color:#C8CDD8;margin-top:8px;font-size:14px;">'
+                'El punto analizado presenta características espectrales asociadas a riesgo de isla de calor urbana.'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="background:#1A2D1A;border:2px solid #2ECC71;border-radius:12px;'
+                'padding:24px;text-align:center;margin-top:16px;">'
+                '<div style="font-family:Space Mono,monospace;font-size:32px;font-weight:700;'
+                'color:#2ECC71;">✅ SIN RIESGO UHI</div>'
+                '<div style="color:#C8CDD8;margin-top:8px;font-size:14px;">'
+                'El punto analizado no presenta características espectrales asociadas a riesgo de isla de calor urbana.'
+                '</div></div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -741,8 +871,11 @@ elif vista == "🗺️ Mapa de predicciones":
 st.markdown("---")
 st.markdown(
     f'<p style="text-align:center;color:#4A5080;font-size:11px;">'
-    f'XGBoost · 600 estimadores · 9 índices espectrales + elevation + season · '
-    f'{MODELO["n_total"]:,} obs. · Accuracy 68% · AUC-ROC 0.7459'
+    f'XGBoost · {metricas["n_arboles"]} estimadores · '
+    f'9 índices espectrales + elevation + season · '
+    f'{metricas["n_total"]:,} obs. · '
+    f'Accuracy {metricas["accuracy"]:.0%} · '
+    f'AUC-ROC {metricas["auc_roc"]:.4f}'
     f'</p>',
     unsafe_allow_html=True,
 )
