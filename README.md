@@ -1,8 +1,8 @@
 # Proyecto ABC: Predicción de Riesgo de Isla de Calor Urbana (UHI) en Barcelona
 
-Este proyecto desarrolla un **modelo de aprendizaje automático para predecir el riesgo de isla de calor urbana (UHI)** en Barcelona utilizando índices espectrales de satélites Sentinel-2 y datos de elevación del terreno. El modelo identifica zonas urbanas con riesgo de acumulación térmica nocturna sin utilizar datos de temperatura como entrada directa.
+Este proyecto desarrolla un **modelo de aprendizaje automático para predecir el riesgo de isla de calor urbana (UHI)** en Barcelona utilizando índices espectrales de satélites Sentinel-2 y datos de temperatura MODIS.
 
-##  Descripción del Proyecto
+## Descripción del Proyecto
 
 Las **islas de calor urbanas (UHI)** son zonas dentro de las ciudades que retienen más calor que su entorno, especialmente durante la noche. Este fenómeno está directamente asociado a:
 - Alta densidad de construcción
@@ -10,10 +10,13 @@ Las **islas de calor urbanas (UHI)** son zonas dentro de las ciudades que retien
 - Impermeabilización del suelo urbano
 - Reducción de masa de agua
 
-Este proyecto entrena un modelo XGBoost que predice el **riesgo UHI** a partir de la **firma espectral del terreno** — cómo los materiales urbanos reflejan y absorben luz en diferentes longitudes de onda — permitiendo a urbanistas y planificadores identificar y priorizar zonas para intervención.
+Este proyecto entrena un modelo XGBoost que predice el **riesgo UHI** a partir de la **firma espectral del terreno** — cómo los materiales urbanos reflejan y absorben luz en diferentes longitudes de onda.
 
-##  Estructura del Repositorio
+## Estructura del Repositorio
 
+**NOTA IMPORTANTE:** La carpeta `src/` con la aplicación Streamlit se encuentra en la rama **`streamlit-app`**, no en la rama `main`.
+
+### Rama `main` (Desarrollo y Análisis)
 ```
 ABC-final-project/
 ├── notebooks/                          # Análisis y desarrollo del modelo
@@ -22,10 +25,6 @@ ABC-final-project/
 │   ├── 03_SVM.ipynb                    # Modelo: Support Vector Machines
 │   ├── 04_RandomForest.ipynb           # Modelo: Random Forest
 │   └── 05_XGB.ipynb                    # Modelo: XGBoost (modelo final)
-│
-├── src/                                # Código de producción
-│   ├── app.py                          # Aplicación Streamlit interactiva
-│   └── exportar_mapa.py                # Generación de mapas de predicciones
 │
 ├── data/
 │   ├── raw/                            # Datos sin procesar
@@ -44,33 +43,44 @@ ABC-final-project/
 └── README.md                           # Este archivo
 ```
 
-##  Flujo de Trabajo
+### Rama `streamlit-app` (Despliegue y Aplicación Web)
+```
+ABC-final-project/
+├── src/                                # Código de producción
+│   ├── app.py                          # Aplicación Streamlit interactiva
+│   └── exportar_mapa.py                # Generación de mapas de predicciones
+│
+├── requirements.txt                    # Dependencias de Python
+└── README.md                           # Documentación específica de la app
+```
 
-###  Construcción del Dataset (`01_build_dataset.ipynb`)
+## Flujo de Trabajo
+
+### 1. Construcción del Dataset (`01_build_dataset.ipynb`)
 - Carga de imágenes Sentinel-2 (índices espectrales)
 - Carga de datos MODIS (temperatura superficial)
 - Carga de elevación SRTM 30m
 - Merge por punto geográfico y fecha
 
-###  Análisis Exploratorio (`02_eda.ipynb`)
+### 2. Análisis Exploratorio (`02_eda.ipynb`)
 - Distribuciones de índices espectrales
 - Correlaciones con variables objetivo
 - Identificación de valores atípicos
 - Patrones espaciales y temporales
 
-###  Modelado (`03_SVM.ipynb`, `04_RandomForest.ipynb`, `05_XGB.ipynb`)
+### 3. Modelado (`03_SVM.ipynb`, `04_RandomForest.ipynb`, `05_XGB.ipynb`)
 - Ingeniería de features
 - Entrenamiento de tres modelos comparativos
 - Selección del modelo XGBoost como óptimo
 - Validación y optimización de hiperparámetros
 
-###  Despliegue (`src/app.py`)
+### 4. Despliegue (`src/app.py` en rama `streamlit-app`)
 - Aplicación Streamlit interactiva
 - Visualización de métricas de rendimiento
 - Mapas interactivos de predicciones
 - Predicciones en tiempo real
 
-##  Variables del Dataset
+## Variables del Dataset
 
 ### Variable Objetivo
 | Variable | Descripción |
@@ -89,7 +99,7 @@ ABC-final-project/
 
 ### Índices Espectrales (Sentinel-2)
 
-####  Vegetación
+#### Vegetación
 - **NDVI** - Normalized Difference Vegetation Index: densidad y vigor vegetal
 - **EVI** - Enhanced Vegetation Index: vegetación en zonas de alta densidad
 - **EVI2** - Enhanced Vegetation Index 2: versión simplificada sin banda azul
@@ -101,26 +111,26 @@ ABC-final-project/
 - **GLI** - Green Leaf Index: vegetación verde activa
 - **PSRI** - Plant Senescence Reflectance Index: senescencia vegetal
 
-####  Urbano / Superficie Construida
+#### Urbano / Superficie Construida
 - **NDBI** - Normalized Difference Built-up Index: superficies construidas
 - **IBI** - Index-based Built-up Index: densidad urbana integrada
 - **UI** - Urban Index: intensidad de urbanización
 - **EBBI** - Enhanced Built-up and Bareness Index: construcción y suelo desnudo
 
-####  Suelo Desnudo
+#### Suelo Desnudo
 - **BSI** - Bare Soil Index: suelo desnudo y superficies degradadas
 - **NDTI** - Normalized Difference Tillage Index: residuos agrícolas
 
-####  Agua y Humedad
+#### Agua y Humedad
 - **MNDWI** - Modified Normalized Difference Water Index: láminas de agua
 - **NDWI** - Normalized Difference Water Index: agua y humedad vegetal
 - **NDMI** - Normalized Difference Moisture Index: humedad en vegetación y suelo
 - **NDSI** - Normalized Difference Snow Index: nieve e hielo
 
-####  Fuego y Áreas Quemadas
+#### Fuego y Áreas Quemadas
 - **NBR** - Normalized Burn Ratio: áreas quemadas y severidad
 
-####  Bandas Espectrales Directas
+#### Bandas Espectrales Directas
 - **blue, green, red**: Bandas RGB visibles
 - **nir**: Near-Infrared (infrarrojo cercano)
 - **swir1, swir2**: Short-Wave Infrared (infrarrojo de onda corta)
@@ -137,7 +147,7 @@ ABC-final-project/
 | `dayofyear` | Día del año (1-365) |
 | `season` | Estación del año (spring, summer, autumn, winter) |
 
-##  Modelo XGBoost
+## Modelo XGBoost
 
 El modelo final XGBoost utiliza **11 features principales**:
 ```
@@ -158,7 +168,7 @@ Las variables más influyentes son:
 3. **ndvi** — Cobertura vegetal
 4. **Bandas espectrales** (nir, swir1, swir2, mndwi)
 
-##  Requisitos
+## Requisitos
 
 ```
 streamlit
@@ -177,36 +187,38 @@ scikit-learn
 pip install -r requirements.txt
 ```
 
-##  Uso
+## Uso
 
-### Ejecutar la Aplicación Streamlit
+### Ejecutar la Aplicación Streamlit (rama `streamlit-app`)
 ```bash
+git checkout streamlit-app
 streamlit run src/app.py
 ```
 
 Accede a: `http://localhost:8501`
 
-### Generar Mapas de Predicciones
+### Generar Mapas de Predicciones (rama `streamlit-app`)
 ```bash
+git checkout streamlit-app
 python src/exportar_mapa.py
 ```
 
-##  Secciones de la Aplicación
+## Secciones de la Aplicación
 
-1. **📊 Resumen Ejecutivo** — Métricas globales, rendimiento por clase, hiperparámetros
-2. **🔬 Análisis Detallado** — Matriz de confusión, reporte de clasificación
-3. **🌿 Importancia de Variables** — Análisis de features con interpretación física
-4. **🗺️ Mapa de Predicciones** — Visualización geoespacial interactiva con folium
-5. **🔮 Predicción** — Interfaz para hacer predicciones puntuales
+1. **Resumen Ejecutivo** — Métricas globales, rendimiento por clase, hiperparámetros
+2. **Análisis Detallado** — Matriz de confusión, reporte de clasificación
+3. **Importancia de Variables** — Análisis de features con interpretación física
+4. **Mapa de Predicciones** — Visualización geoespacial interactiva con folium
+5. **Predicción** — Interfaz para hacer predicciones puntuales
 
-##  Casos de Uso
+## Casos de Uso
 
 - **Planificadores urbanos**: Identificar zonas prioritarias para intervención de mitigación térmica
 - **Investigadores**: Analizar relaciones entre firma espectral y fenómenos urbanos
 - **Políticas públicas**: Priorizar inversión en espacios verdes, materiales reflectantes, mejora del drenaje
 - **Monitoreo ambiental**: Seguimiento temporal de cambios en entorno urbano
 
-##  Metodología
+## Metodología
 
 ### Cálculo del Objetivo UHI
 El `uhi_risk` se determina a partir de:
@@ -220,19 +232,19 @@ El `uhi_risk` se determina a partir de:
 - **Sin variables de temperatura como input**: El modelo aprende patrones espectrales asociados a UHI
 - **Geoespacialización**: Predicciones a nivel de píxeles (1km² de resolución en Sentinel-2)
 
-##  Resultado e Impacto
+## Resultado e Impacto
 
 El modelo demuestra que **es posible predecir el riesgo de isla de calor urbana sin usar datos directos de temperatura**, utilizando únicamente la firma espectral del terreno. Esto abre posibilidades para:
 - Monitoreo basado en satélites públicos (Sentinel-2, Landsat)
 - Predicción en ciudades sin infraestructura de medición térmica
 - Integración en sistemas de alerta temprana
 
-##  Autores
+## Autores
 
 - ekbalam11, anaisaponte-GitH, crerov
 
-
 ---
 
-**Última actualización:** Mayo 2026  
+**Última actualización:** Mayo 2026
 **Rama principal:** `main`
+**Rama despliegue:** `streamlit-app`
