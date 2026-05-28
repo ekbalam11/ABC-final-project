@@ -14,7 +14,7 @@ Este proyecto entrena un modelo XGBoost que predice el **riesgo UHI** a partir d
 
 ## Estructura del Repositorio
 
-**NOTA IMPORTANTE:** La carpeta `src/` con la aplicación Streamlit se encuentra en la rama **`streamlit-app`**, no en la rama `main`.
+**NOTA IMPORTANTE:** La carpeta `src/` con la aplicación Streamlit se encuentra en la rama **despliegue-y-mapa**, no en la rama `main`.
 
 ### Rama `main` (Desarrollo y Análisis)
 ```
@@ -205,11 +205,11 @@ python src/exportar_mapa.py
 
 ## Secciones de la Aplicación
 
-1. **Resumen Ejecutivo** — Métricas globales, rendimiento por clase, hiperparámetros
-2. **Análisis Detallado** — Matriz de confusión, reporte de clasificación
-3. **Importancia de Variables** — Análisis de features con interpretación física
-4. **Mapa de Predicciones** — Visualización geoespacial interactiva con folium
-5. **Predicción** — Interfaz para hacer predicciones puntuales
+1. **📊 Resumen Ejecutivo** — Métricas globales, rendimiento por clase, hiperparámetros
+2. **🔬 Análisis Detallado** — Matriz de confusión, reporte de clasificación
+3. **🌿 Importancia de Variables** — Análisis de features con interpretación física
+4. **🗺️ Mapa de Predicciones** — Visualización geoespacial interactiva con folium
+5. **🔮 Predicción** — Interfaz para hacer predicciones puntuales
 
 ## Casos de Uso
 
