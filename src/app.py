@@ -139,7 +139,7 @@ def cargar_metricas():
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="UHI · XGBoost",
+    page_title="UHI  · XGBoost",
     page_icon="🌡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -269,9 +269,6 @@ with col_h1:
         <h1 style='font-family:Space Mono,monospace;font-size:22px;margin:0;letter-spacing:1px;'>
             XGBoost · Riesgo UHI
         </h1>
-        <p style='color:#6B7280;margin:6px 0 0;font-size:13px;'>
-            Clasificación binaria · Índices espectrales satelitales → anomalía térmica nocturna
-        </p>
     </div>
     """, unsafe_allow_html=True)
 with col_h2:
@@ -281,6 +278,83 @@ with col_h2:
     </div>
     """, unsafe_allow_html=True)
 
+# Párrafo introductorio
+st.markdown("""
+<div style='background:#13151F;border-left:3px solid #3498DB;border-radius:0 8px 8px 0;
+padding:18px 22px;margin:16px 0 8px;font-size:13px;line-height:1.8;color:#C8CDD8;'>
+
+Las <b style='color:#E0E4EF;'>islas de calor urbanas</b> (UHI, por sus siglas en inglés) son zonas 
+de las ciudades que acumulan y retienen más calor que su entorno, especialmente durante la noche. 
+Este fenómeno está directamente relacionado con la densidad de edificios, la falta de vegetación 
+y la impermeabilización del suelo urbano.
+<br><br>
+Este modelo predice el riesgo UHI en Barcelona a partir de imágenes satelitales, 
+<b style='color:#E0E4EF;'>sin utilizar datos de temperatura directos</b>. Analiza la firma 
+espectral del suelo — cómo refleja y absorbe la luz en distintas longitudes de onda — para 
+identificar zonas con características físicas asociadas a mayor retención de calor nocturno.
+<br><br>
+Comprender y anticipar estas zonas permite a urbanistas y planificadores priorizar intervenciones 
+como la creación de zonas verdes, el uso de materiales reflectantes o la mejora del drenaje urbano, 
+con el objetivo de <b style='color:#E0E4EF;'>reducir el impacto del calor en la salud y el bienestar 
+de la ciudadanía</b>.
+
+</div>
+""", unsafe_allow_html=True)
+
+# Desplegable de variables
+with st.expander("🔭 Variables de análisis"):
+    st.markdown("""
+    <table style='width:100%;font-size:13px;color:#C8CDD8;border-collapse:collapse;'>
+        <thead>
+            <tr style='border-bottom:1px solid #2D3045;'>
+                <th style='text-align:left;padding:8px 12px;color:#E0E4EF;font-family:Space Mono,monospace;'>Variable</th>
+                <th style='text-align:left;padding:8px 12px;color:#E0E4EF;font-family:Space Mono,monospace;'>En palabras simples</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>NDVI</b></td>
+                <td style='padding:8px 12px;'>¿Cuánta vegetación hay? Parques y jardines tienen valores altos. Asfalto y edificios, valores bajos.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>NDBI</b></td>
+                <td style='padding:8px 12px;'>¿Qué tan urbanizada está la zona? Más edificios y superficies construidas = valor más alto.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>MNDWI</b></td>
+                <td style='padding:8px 12px;'>¿Hay agua cerca? Ríos, fuentes o zonas húmedas tienen valores altos.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>NBR</b></td>
+                <td style='padding:8px 12px;'>¿Está la vegetación sana o degradada? Complementa al NDVI detectando suelo quemado o seco.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>NDMI</b></td>
+                <td style='padding:8px 12px;'>¿Qué tan húmedo está el suelo y la vegetación? Zonas secas tienen valores bajos.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>NDWI</b></td>
+                <td style='padding:8px 12px;'>Similar a MNDWI pero menos preciso en entornos urbanos. Detecta humedad general.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>NIR</b></td>
+                <td style='padding:8px 12px;'>Reflejo infrarrojo cercano. La vegetación sana refleja mucho; el asfalto, poco.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>SWIR1 / SWIR2</b></td>
+                <td style='padding:8px 12px;'>Infrarrojo de onda corta. Sensible a materiales de construcción y humedad del suelo.</td>
+            </tr>
+            <tr style='border-bottom:1px solid #1F2235;'>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>Elevation</b></td>
+                <td style='padding:8px 12px;'>¿A qué altura está el punto? Las zonas más altas tienden a ser más frescas.</td>
+            </tr>
+            <tr>
+                <td style='padding:8px 12px;'><b style='color:#3498DB;'>Season</b></td>
+                <td style='padding:8px 12px;'>¿En qué estación del año se tomó la imagen? El riesgo UHI varía entre verano e invierno.</td>
+            </tr>
+        </tbody>
+    </table>
+    """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # VISTA 1 — RESUMEN EJECUTIVO
